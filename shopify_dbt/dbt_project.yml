@@ -1,0 +1,23 @@
+name: 'shopify_dbt'
+version: '1.0.0'
+profile: 'shopify_dbt'
+
+model-paths: ["models"]
+macro-paths: ["macros"]
+test-paths: ["tests"]
+snapshot-paths: ["snapshots"]
+clean-targets: ["target", "dbt_packages"]
+
+models:
+  shopify_dbt:
+    staging:
+      +schema: staging        # -> SHOPIFY.STAGING
+      +materialized: view     # cheap: always reflects latest raw data
+    marts:
+      +schema: marts          # -> SHOPIFY.MARTS
+      +materialized: table    # fast for dashboards
+
+vars:
+  store_timezone: 'America/Los_Angeles'   # business dates are reported in the store's local time
+  vip_min_orders: 10                      # customer segment thresholds (derived from behavior)
+  repeat_min_orders: 2

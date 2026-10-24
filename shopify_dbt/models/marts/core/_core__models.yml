@@ -1,0 +1,89 @@
+version: 2
+
+models:
+  - name: dim_products
+    description: "One row per product variant (the sellable unit). Current attributes."
+    columns:
+      - name: variant_id
+        tests: [unique, not_null]
+      - name: sku
+        description: "Required for sellable items. Gift cards have no SKU in Shopify, so they're excluded from this test."
+        tests:
+          - not_null:
+              config:
+                where: "is_sellable"
+
+  - name: dim_variant_price_history
+    description: "SCD Type 2 price/cost history per variant. valid_to is null for the current version."
+    columns:
+      - name: price_version_id
+        tests: [unique, not_null]
+
+  - name: dim_customers
+    description: >
+      One row per customer plus a 'GUEST' row. customer_segment is derived from completed orders:
+      vip (>= vip_min_orders), repeat (>= repeat_min_orders), one_time (1), no_purchase (0), guest.
+      acquisition_month = month of first order.
+    columns:
+      - name: customer_key
+        tests: [unique, not_null]
+      - name: customer_segment
+        tests:
+          - accepted_values:
+              arguments:
+                values: ['vip', 'repeat', 'one_time', 'no_purchase', 'guest']
+
+  - name: fct_order_lines
+    description: >
+      One row per order line. gross_sales = qty x unit price at time of sale; net_sales = after discounts;
+      net_revenue = net_sales - refunded_amount. cogs uses CURRENT unit cost (no historical cost available).
+    columns:
+      - name: order_line_id
+        tests: [unique, not_null]
+      - name: customer_key
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_customers')
+                field: customer_key
+      - name: variant_id
+        tests:
+          - relationships:
+              arguments:
+                to: ref('dim_products')
+                field: variant_id
+              config: {severity: warn}   # a deleted variant would still have historical sales
+
+  - name: fct_orders
+    description: >
+      One row per order. customer_order_sequence = 1 marks a customer's first order.
+      is_excluded_from_reporting flags internal/test orders (non-seeded manual orders and test orders);
+      they stay in the facts but are excluded from KPI models and dashboards.
+    columns:
+      - name: order_id
+        tests: [unique, not_null]
+      - name: customer_key
+        tests:
+          - relationships:
+              arguments:
+                to: ref('dim_customers')
+                field: customer_key
+
+  - name: fct_refunds
+    description: "One row per refunded line. refund_date = when refunded (finance view)."
+    columns:
+      - name: refund_line_id
+        tests: [unique, not_null]
+
+  - name: fct_inventory_daily
+    description: "One row per variant per snapshot day. days_on_hand uses trailing-28-day sales velocity."
+    columns:
+      - name: inventory_day_id
+        tests: [unique, not_null]
+
+  - name: agg_daily_sales
+    description: "One row per calendar day (store local time), zero-filled. Feeds the executive KPI page."
+    columns:
+      - name: calendar_date
+        tests: [unique, not_null]

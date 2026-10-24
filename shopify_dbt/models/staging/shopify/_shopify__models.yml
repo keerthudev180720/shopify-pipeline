@@ -1,0 +1,97 @@
+version: 2
+
+models:
+  - name: base_shopify__orders
+    description: "Latest version of each raw order (dedup on order id). Internal building block."
+  - name: base_shopify__products
+    description: "Latest version of each raw product (dedup on product id). Internal building block."
+
+  - name: stg_shopify__orders
+    description: "One row per order. processed_at is the business date; updated_at drives incremental extraction."
+    columns:
+      - name: order_id
+        tests: [unique, not_null]
+      - name: order_number
+        tests: [unique, not_null]
+      - name: processed_at
+        tests: [not_null]
+      - name: financial_status
+        tests:
+          - accepted_values:
+              arguments:
+                values: ['PAID', 'PENDING', 'PARTIALLY_REFUNDED', 'REFUNDED', 'PARTIALLY_PAID', 'AUTHORIZED', 'VOIDED', 'EXPIRED']
+              config: {severity: warn}
+      - name: customer_id
+        description: "Null for guest checkouts."
+        tests:
+          - relationships:
+              arguments:
+                to: ref('stg_shopify__customers')
+                field: customer_id
+
+  - name: stg_shopify__order_lines
+    description: "One row per order line item."
+    columns:
+      - name: order_line_id
+        tests: [unique, not_null]
+      - name: order_id
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_shopify__orders')
+                field: order_id
+      - name: quantity
+        tests: [not_null]
+
+  - name: stg_shopify__refunds
+    description: "One row per refund. refunded_at is backdated business date."
+    columns:
+      - name: refund_id
+        tests: [unique, not_null]
+      - name: order_id
+        tests:
+          - relationships:
+              arguments:
+                to: ref('stg_shopify__orders')
+                field: order_id
+
+  - name: stg_shopify__refund_lines
+    description: "One row per refunded line. refund_amount is the value of goods returned."
+    columns:
+      - name: refund_line_id
+        tests: [unique, not_null]
+      - name: order_line_id
+        tests:
+          - relationships:
+              arguments:
+                to: ref('stg_shopify__order_lines')
+                field: order_line_id
+
+  - name: stg_shopify__products
+    columns:
+      - name: product_id
+        tests: [unique, not_null]
+
+  - name: stg_shopify__variants
+    columns:
+      - name: variant_id
+        tests: [unique, not_null]
+      - name: product_id
+        tests:
+          - relationships:
+              arguments:
+                to: ref('stg_shopify__products')
+                field: product_id
+
+  - name: stg_shopify__customers
+    description: "One row per customer. IDs and behavior only; no PII."
+    columns:
+      - name: customer_id
+        tests: [unique, not_null]
+
+  - name: stg_shopify__inventory_levels
+    description: "Daily inventory snapshot: one row per variant x location x day."
+    columns:
+      - name: inventory_snapshot_id
+        tests: [unique, not_null]

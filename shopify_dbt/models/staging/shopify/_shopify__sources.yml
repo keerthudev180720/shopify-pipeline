@@ -1,0 +1,21 @@
+version: 2
+
+sources:
+  - name: shopify_raw
+    description: "Raw Shopify extracts loaded from S3 by COPY INTO. Append-only; payload is the untouched API record."
+    database: SHOPIFY
+    schema: RAW
+    config:
+      loaded_at_field: loaded_at
+      freshness:                     # `dbt source freshness` alerts if loads stop
+        warn_after: {count: 26, period: hour}
+        error_after: {count: 50, period: hour}
+    tables:
+      - name: orders
+      - name: products
+      - name: customers
+      - name: inventory
+        description: "Full inventory snapshot per extraction run (Shopify keeps no history)."
+      - name: extract_runs
+        config:
+          freshness: null
